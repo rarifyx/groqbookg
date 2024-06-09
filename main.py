@@ -163,7 +163,7 @@ def generate_book_structure(prompt: str):
                 "content": f"Write a comprehensive structure, omiting introduction and conclusion sections (forward, author's note, summary), for a long (>300 page) book on the following subject:\n\n<subject>{prompt}</subject>"
             }
         ],
-        temperature=0.3,
+        temperature=1,
         max_tokens=8000,
         top_p=1,
         stream=False,
@@ -178,7 +178,7 @@ def generate_book_structure(prompt: str):
 
 def generate_section(prompt: str):
     stream = st.session_state.groq.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama3-70b-8192",
         messages=[
             {
                 "role": "system",
@@ -189,7 +189,7 @@ def generate_section(prompt: str):
                 "content": f"Generate a long, comprehensive, structured chapter for the following section:\n\n<section_title>{prompt}</section_title>"
             }
         ],
-        temperature=0.3,
+        temperature=1,
         max_tokens=8000,
         top_p=1,
         stream=True,

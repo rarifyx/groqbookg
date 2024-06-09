@@ -219,7 +219,7 @@ if 'statistics_text' not in st.session_state:
 
 
 st.write("""
-# Groqbook: Write full books using llama3 (8b and 70b) on Groq
+# Groqbook: Write full books using llama3 (70b) on Groq
 """)
 
 def disable():
@@ -294,7 +294,7 @@ try:
             # st.session_state.statistics_text = str(large_model_generation_statistics)
             # display_statistics()
 
-            total_generation_statistics = GenerationStatistics(model_name="llama3-8b-8192")
+            total_generation_statistics = GenerationStatistics(model_name="llama3-70b-8192")
 
             try:
                 book_structure_json = json.loads(book_structure)

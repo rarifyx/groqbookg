@@ -160,7 +160,7 @@ def generate_book_structure(prompt: str):
             },
             {
                 "role": "user",
-                "content": f"Write a comprehensive structure, omiting introduction and conclusion sections (forward, author's note, summary), for a long (>300 page) book on the following subject:\n\n<subject>{prompt}</subject>"
+                "content": f"Apply Logical Reasoning then Create a detailed outline, excluding prefatory and concluding chapters (prologue, epilogue, appendices), for a comprehensive (>500 page) book on the following subject:\n\n<subject>{prompt}</subject>"
             }
         ],
         temperature=1,

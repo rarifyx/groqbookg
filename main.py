@@ -1,21 +1,32 @@
 import streamlit as st
-from groq import Groq
 import json
 import os
 from io import BytesIO
 from md2pdf.core import md2pdf
+from google.generativeai import GenerationConfig, GenerativeModel
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", None)
+# Replace these with your API key and model name
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", None)
+MODEL_NAME = "gemini-pro"  # Choose from available models on Google AI Platform
 
 if 'api_key' not in st.session_state:
-    st.session_state.api_key = GROQ_API_KEY
+    st.session_state.api_key = GEMINI_API_KEY
 
-if 'groq' not in st.session_state:
-    if GROQ_API_KEY:
-        st.session_state.groq = Groq()
+if 'model' not in st.session_state:
+    if GEMINI_API_KEY:
+        st.session_state.model = GenerativeModel(
+            model_name=MODEL_NAME,
+            generation_config=GenerationConfig(
+                temperature=1,  # Adjust these as needed
+                top_p=0.95,
+                top_k=64,
+                max_output_tokens=8192,
+                response_mime_type="text/plain",
+            ),
+        )
 
 class GenerationStatistics:
-    def __init__(self, input_time=0,output_time=0,input_tokens=0,output_tokens=0,total_time=0,model_name="llama3-8b-8192"):
+    def __init__(self, input_time=0,output_time=0,input_tokens=0,output_tokens=0,total_time=0,model_name="gemini-pro"):
         self.input_time = input_time
         self.output_time = output_time
         self.input_tokens = input_tokens
@@ -142,70 +153,43 @@ def create_pdf_file(content: str):
     """
     pdf_buffer = BytesIO()
     md2pdf(pdf_buffer, md_content=content)
-    # md2pdf(pdf_buffer, md_content="Generated using Llama3 on <a href=\"https://github.com/bklieger/groqbook\" style=\"color: blue;\">Groqbook</a>\n\n"+content) # Optional citation
     pdf_buffer.seek(0)
     return pdf_buffer
 
 
 def generate_book_structure(prompt: str):
     """
-    Returns book structure content as well as total tokens and total time for generation.
+    Generates the book structure using Gemini.
     """
-    completion = st.session_state.groq.chat.completions.create(
-        model="llama3-70b-8192",
-        messages=[
-            {
-                "role": "system",
-                "content": "Write in JSON format:\n\n{\"Title of section goes here\":\"Description of section goes here\",\n\"Title of section goes here\":{\"Title of section goes here\":\"Description of section goes here\",\"Title of section goes here\":\"Description of section goes here\",\"Title of section goes here\":\"Description of section goes here\"}}"
-            },
-            {
-                "role": "user",
-                "content": f"Apply Logical Reasoning then Create a detailed outline, excluding prefatory and concluding chapters (prologue, epilogue, appendices), for a comprehensive (>500 page) book on the following subject:\n\n<subject>{prompt}</subject>"
-            }
-        ],
-        temperature=1,
-        max_tokens=8000,
-        top_p=1,
-        stream=False,
-        response_format={"type": "json_object"},
-        stop=None,
+    if not st.session_state.api_key:
+        raise ValueError("Please provide a valid Gemini API key.")
+
+    response = st.session_state.model.predict(
+        prompt=f"Write in JSON format:\n\n{{\"Title of section goes here\":\"Description of section goes here\",\n\"Title of section goes here\":{{\"Title of section goes here\":\"Description of section goes here\",\"Title of section goes here\":\"Description of section goes here\",\"Title of section goes here\":\"Description of section goes here\"}}}}",
+        temperature=0.5,  # Adjust temperature for creativity
+        max_output_tokens=8000,
     )
 
-    usage = completion.usage
-    statistics_to_return = GenerationStatistics(input_time=usage.prompt_time, output_time=usage.completion_time, input_tokens=usage.prompt_tokens, output_tokens=usage.completion_tokens, total_time=usage.total_time,model_name="llama3-70b-8192")
-
-    return statistics_to_return, completion.choices[0].message.content
+    try:
+        book_structure_json = json.loads(response.text)
+        return book_structure_json
+    except json.JSONDecodeError:
+        st.error("Failed to decode the book structure. Please try again.")
 
 def generate_section(prompt: str):
-    stream = st.session_state.groq.chat.completions.create(
-        model="llama3-70b-8192",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are an expert writer. Generate a long, comprehensive, structured chapter for the section provided."
-            },
-            {
-                "role": "user",
-                "content": f"Generate a long, comprehensive, structured chapter for the following section:\n\n<section_title>{prompt}</section_title>"
-            }
-        ],
-        temperature=1,
-        max_tokens=8000,
-        top_p=1,
-        stream=True,
-        stop=None,
+    """
+    Generates a section using Gemini.
+    """
+    if not st.session_state.api_key:
+        raise ValueError("Please provide a valid Gemini API key.")
+
+    response = st.session_state.model.predict(
+        prompt=f"Generate a long, comprehensive, structured chapter for the following section:\n\n<section_title>{prompt}</section_title>",
+        temperature=0.5,  # Adjust temperature for creativity
+        max_output_tokens=8000,
     )
 
-    for chunk in stream:
-        tokens = chunk.choices[0].delta.content
-        if tokens:
-            yield tokens
-        if x_groq := chunk.x_groq:
-            if not x_groq.usage:
-                continue
-            usage = x_groq.usage
-            statistics_to_return = GenerationStatistics(input_time=usage.prompt_time, output_time=usage.completion_time, input_tokens=usage.prompt_tokens, output_tokens=usage.completion_tokens, total_time=usage.total_time,model_name="llama3-8b-8192")
-            yield statistics_to_return
+    return response.text
 
 # Initialize
 if 'button_disabled' not in st.session_state:
@@ -219,7 +203,7 @@ if 'statistics_text' not in st.session_state:
 
 
 st.write("""
-# Groqbook: Write full books using llama3 (70b) on Groq
+# GeminiBook: Write full books using Gemini on Google AI
 """)
 
 def disable():
@@ -257,8 +241,8 @@ try:
 
 
     with st.form("groqform"):
-        if not GROQ_API_KEY:
-            groq_input_key = st.text_input("Enter your Groq API Key (gsk_yA...):", "",type="password")
+        if not GEMINI_API_KEY:
+            gemini_input_key = st.text_input("Enter your Gemini API Key (gsk_yA...):", "",type="password")
 
         topic_text = st.text_input("What do you want the book to be about?", "")
 
@@ -286,18 +270,27 @@ try:
             st.session_state.statistics_text = "Generating structure in background...." # Show temporary message before structure is generated and statistics show
             display_statistics()
 
-            if not GROQ_API_KEY:
-                st.session_state.groq = Groq(api_key=groq_input_key)
+            if not GEMINI_API_KEY:
+                st.session_state.model = GenerativeModel(
+                    model_name=MODEL_NAME,
+                    generation_config=GenerationConfig(
+                        temperature=1,  # Adjust these as needed
+                        top_p=0.95,
+                        top_k=64,
+                        max_output_tokens=8192,
+                        response_mime_type="text/plain",
+                    ),
+                    api_key=gemini_input_key
+                )
 
-            large_model_generation_statistics, book_structure = generate_book_structure(topic_text)
+            book_structure_json = generate_book_structure(topic_text)
 
             # st.session_state.statistics_text = str(large_model_generation_statistics)
             # display_statistics()
 
-            total_generation_statistics = GenerationStatistics(model_name="llama3-70b-8192")
+            total_generation_statistics = GenerationStatistics(model_name=MODEL_NAME)
 
             try:
-                book_structure_json = json.loads(book_structure)
                 book = Book(book_structure_json)
                 
                 if 'book' not in st.session_state:
@@ -312,17 +305,7 @@ try:
                     for title, content in sections.items():
                         if isinstance(content, str):
                             content_stream = generate_section(title+": "+content)
-                            for chunk in content_stream:
-                                # Check if GenerationStatistics data is returned instead of str tokens
-                                chunk_data = chunk
-                                if (type(chunk_data)==GenerationStatistics):
-                                    total_generation_statistics.add(chunk_data)
-                                    
-                                    st.session_state.statistics_text = str(total_generation_statistics)
-                                    display_statistics()
-
-                                elif chunk!=None:
-                                    st.session_state.book.update_content(title, chunk)
+                            st.session_state.book.update_content(title, content_stream)
                         elif isinstance(content, dict):
                             stream_section_content(content)
 
